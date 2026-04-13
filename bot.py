@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 
 import database as db
 import views as v
+from views import make_signup_view
 from shuffle import build_groups, can_build_group
 from database import get_bench_ids_from_last_round
 
@@ -144,7 +145,7 @@ async def _finish_event(event: dict, message: discord.Message):
             repeat_days=repeat_days
         )
         new_event = await db.get_event(new_event_id)
-        view = _make_signup_view(new_event_id)
+        view = make_signup_view(new_event_id)
         embed = v.build_signup_embed(new_event, [])
         new_msg = await channel.send(embed=embed, view=view)
         await db.set_event_message(new_event_id, str(new_msg.id))
@@ -276,7 +277,7 @@ async def _cmd_create(interaction: discord.Interaction, datum: str, uhrzeit: str
     signups = []
 
     embed = v.build_signup_embed(event, signups)
-    view = _make_signup_view(event_id)
+    view = make_signup_view(event_id)
 
     await interaction.response.send_message(embed=embed, view=view)
     msg = await interaction.original_response()
@@ -304,64 +305,6 @@ async def _cmd_stop(interaction: discord.Interaction):
     )
 
 
-def _make_signup_view(event_id: int) -> discord.ui.View:
-    """Erzeugt eine SignupView mit stabilen custom_ids für den gegebenen event_id."""
-
-    class DynamicSignupView(discord.ui.View):
-        def __init__(self):
-            super().__init__(timeout=None)
-
-        @discord.ui.button(label="🛡️ Tank", style=discord.ButtonStyle.primary,
-                           custom_id=f"signup_tank_{event_id}")
-        async def btn_tank(self_, interaction: discord.Interaction, button: discord.ui.Button):
-            await db.add_signup(event_id, str(interaction.user.id), interaction.user.display_name, "tank")
-            await _refresh_signup(interaction, event_id)
-            await interaction.response.send_message("Du bist als **Tank** angemeldet.", ephemeral=True)
-
-        @discord.ui.button(label="💚 Heiler", style=discord.ButtonStyle.success,
-                           custom_id=f"signup_healer_{event_id}")
-        async def btn_healer(self_, interaction: discord.Interaction, button: discord.ui.Button):
-            await db.add_signup(event_id, str(interaction.user.id), interaction.user.display_name, "healer")
-            await _refresh_signup(interaction, event_id)
-            await interaction.response.send_message("Du bist als **Heiler** angemeldet.", ephemeral=True)
-
-        @discord.ui.button(label="⚔️ DD", style=discord.ButtonStyle.secondary,
-                           custom_id=f"signup_dps_{event_id}")
-        async def btn_dps(self_, interaction: discord.Interaction, button: discord.ui.Button):
-            await db.add_signup(event_id, str(interaction.user.id), interaction.user.display_name, "dps")
-            await _refresh_signup(interaction, event_id)
-            await interaction.response.send_message("Du bist als **DD** angemeldet.", ephemeral=True)
-
-        @discord.ui.button(label="❌ Abmelden", style=discord.ButtonStyle.danger,
-                           custom_id=f"signup_remove_{event_id}")
-        async def btn_remove(self_, interaction: discord.Interaction, button: discord.ui.Button):
-            await db.remove_signup(event_id, str(interaction.user.id))
-            await _refresh_signup(interaction, event_id)
-            await interaction.response.send_message("Du wurdest abgemeldet.", ephemeral=True)
-
-        @discord.ui.button(label="🏁 Abbrechen", style=discord.ButtonStyle.danger,
-                           custom_id=f"signup_cancel_{event_id}", row=1)
-        async def btn_cancel(self_, interaction: discord.Interaction, button: discord.ui.Button):
-            if not interaction.user.guild_permissions.manage_guild:
-                await interaction.response.send_message("Nur Admins können das Event abbrechen.", ephemeral=True)
-                return
-            await db.finish_event(event_id)
-            embed = v.build_cancelled_embed()
-            await interaction.message.edit(embed=embed, view=discord.ui.View())
-            await interaction.response.send_message("Event abgebrochen.", ephemeral=True)
-
-    return DynamicSignupView()
-
-
-async def _refresh_signup(interaction: discord.Interaction, event_id: int):
-    event = await db.get_event(event_id)
-    if not event:
-        return
-    signups = await db.get_signups(event_id)
-    embed = v.build_signup_embed(event, signups)
-    await interaction.message.edit(embed=embed)
-
-
 # ---------------------------------------------------------------------------
 # Bot Events
 # ---------------------------------------------------------------------------
@@ -376,7 +319,7 @@ async def on_ready():
     for event in active_events:
         if event["status"] == "signup":
             event_id = event["id"]
-            view = _make_signup_view(event_id)
+            view = make_signup_view(event_id)
             bot.add_view(view)
 
     scheduler.start()
