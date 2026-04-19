@@ -284,18 +284,4 @@ def make_signup_view(event_id: int) -> discord.ui.View:
             await _refresh_signup(interaction, event_id)
             await interaction.response.send_message("Du wurdest abgemeldet.", ephemeral=True)
 
-        @discord.ui.button(label="🏁 Abbrechen", style=discord.ButtonStyle.secondary,
-                           custom_id=f"signup_cancel_{event_id}", row=1)
-        async def btn_cancel(self_, interaction: discord.Interaction,
-                             button: discord.ui.Button):
-            if not interaction.user.guild_permissions.manage_guild:
-                await interaction.response.send_message(
-                    "Nur Admins können das Event abbrechen.", ephemeral=True
-                )
-                return
-            await finish_event(event_id)
-            embed = build_cancelled_embed()
-            await interaction.message.edit(content=None, embed=embed, view=discord.ui.View())
-            await interaction.response.send_message("Event abgebrochen.", ephemeral=True)
-
     return DynamicSignupView()
