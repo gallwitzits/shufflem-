@@ -133,6 +133,20 @@ async def remove_signup(event_id: int, user_id: str):
         await db.commit()
 
 
+async def remove_player_from_event(event_id: int, user_id: str):
+    """Entfernt einen Spieler komplett: aus Signups und allen Gruppenassignments."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "DELETE FROM signups WHERE event_id = ? AND user_id = ?",
+            (event_id, user_id)
+        )
+        await db.execute(
+            "DELETE FROM group_assignments WHERE event_id = ? AND user_id = ?",
+            (event_id, user_id)
+        )
+        await db.commit()
+
+
 async def get_signups(event_id: int) -> list[dict]:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row

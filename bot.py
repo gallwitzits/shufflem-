@@ -142,7 +142,11 @@ def _make_groups_admin_view(event_id: int, round_number: int,
         await _start_round(event, message, round_number=current + 1,
                            now_utc=datetime.now(tz=timezone.utc))
 
-    return v.make_groups_admin_view(event_id, round_number, on_swap, on_reshuffle)
+    async def on_remove(interaction: discord.Interaction):
+        groups, bench = await get_groups_for_round(event_id, round_number)
+        await v.send_remove_menu(interaction, event_id, round_number, groups, bench)
+
+    return v.make_groups_admin_view(event_id, round_number, on_swap, on_reshuffle, on_remove)
 
 
 async def _finish_event(event: dict, message: discord.Message):

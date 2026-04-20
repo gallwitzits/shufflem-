@@ -219,7 +219,7 @@ def build_stats_embed(stats: list[dict]) -> discord.Embed:
 
 
 def make_groups_admin_view(event_id: int, round_number: int,
-                           on_swap, on_reshuffle) -> discord.ui.View:
+                           on_swap, on_reshuffle, on_remove) -> discord.ui.View:
     """
     Admin-Buttons die auf dem Gruppen-Embed erscheinen.
     on_swap / on_reshuffle sind async Callbacks aus bot.py.
@@ -248,6 +248,16 @@ def make_groups_admin_view(event_id: int, round_number: int,
                 )
                 return
             await on_reshuffle(interaction)
+
+        @discord.ui.button(label="❌ Spieler entfernen", style=discord.ButtonStyle.danger,
+                           custom_id=f"groups_remove_{event_id}")
+        async def btn_remove(self_, interaction: discord.Interaction, button: discord.ui.Button):
+            if not interaction.user.guild_permissions.manage_guild:
+                await interaction.response.send_message(
+                    "Nur Admins können Spieler entfernen.", ephemeral=True
+                )
+                return
+            await on_remove(interaction)
 
     return GroupsAdminView()
 
@@ -349,6 +359,81 @@ async def send_swap_menu(interaction: discord.Interaction,
     await interaction.response.send_message(
         "Wähle die beiden Spieler die getauscht werden sollen:",
         view=SwapView(),
+        ephemeral=True
+    )
+
+
+async def send_remove_menu(interaction: discord.Interaction,
+                           event_id: int, round_number: int,
+                           groups: list[dict], bench: list[dict]):
+    """Ephemeres Menü zum Entfernen eines Spielers aus dem gesamten Event."""
+    opts = []
+    for i, g in enumerate(groups, 1):
+        for p in [g["tank"], g["healer"]] + g["dps"]:
+            if not p:
+                continue
+            role_icon = ROLE_EMOJI.get(p["assigned_role"], "❓")
+            opts.append(discord.SelectOption(
+                label=p["username"][:25],
+                value=p["user_id"],
+                description=f"Gruppe {i} – {role_icon} {p['assigned_role'].capitalize()}",
+                emoji=role_icon
+            ))
+    for p in bench:
+        opts.append(discord.SelectOption(
+            label=p["username"][:25],
+            value=p["user_id"],
+            description="🪑 Bench",
+            emoji="🪑"
+        ))
+
+    if not opts:
+        await interaction.response.send_message("Keine Spieler im Event.", ephemeral=True)
+        return
+
+    opts = opts[:25]
+
+    class RemoveView(discord.ui.View):
+        def __init__(self):
+            super().__init__(timeout=120)
+
+        @discord.ui.select(placeholder="Spieler auswählen der entfernt werden soll",
+                           options=opts, custom_id="remove_select")
+        async def select_player(self_, interaction: discord.Interaction, select: discord.ui.Select):
+            self_.selected = interaction.data["values"][0]
+            await interaction.response.defer()
+
+        @discord.ui.button(label="✅ Entfernen", style=discord.ButtonStyle.danger,
+                           custom_id="remove_confirm", row=1)
+        async def confirm(self_, interaction: discord.Interaction, button: discord.ui.Button):
+            if not hasattr(self_, "selected"):
+                await interaction.response.edit_message(
+                    content="⚠️ Bitte zuerst einen Spieler auswählen.", view=self_
+                )
+                return
+
+            await interaction.response.defer()
+
+            from database import remove_player_from_event, get_groups_for_round, get_event
+            await remove_player_from_event(event_id, self_.selected)
+
+            new_groups, new_bench = await get_groups_for_round(event_id, round_number)
+            event = await get_event(event_id)
+            embeds, _ = build_groups_embeds(event, new_groups, new_bench)
+
+            await interaction.edit_original_response(content="✅ Spieler entfernt!", view=None)
+
+            channel = interaction.channel
+            async for msg in channel.history(limit=15):
+                if msg.author == interaction.client.user and msg.embeds:
+                    title = msg.embeds[0].title or ""
+                    if "Shuffle" in title and "Runde" in title:
+                        await msg.edit(embeds=embeds)
+                        break
+
+    await interaction.response.send_message(
+        "Wähle den Spieler der aus dem Event entfernt werden soll:",
+        view=RemoveView(),
         ephemeral=True
     )
 
