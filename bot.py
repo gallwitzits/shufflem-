@@ -353,7 +353,7 @@ async def on_ready():
             view = make_signup_view(event_id)
             bot.add_view(view)
         elif event["status"] == "running":
-            # Admin-Buttons für laufende Runden wiederherstellen
+            # Admin-Buttons für laufende Runden wiederherstellen + zur Nachricht hinzufügen
             try:
                 channel = bot.get_channel(int(event["channel_id"]))
                 if channel and event.get("message_id"):
@@ -361,8 +361,9 @@ async def on_ready():
                     round_number = event["current_round"]
                     admin_view = _make_groups_admin_view(event_id, round_number, message)
                     bot.add_view(admin_view)
-            except Exception:
-                pass
+                    await message.edit(view=admin_view)
+            except Exception as e:
+                print(f"Fehler beim Wiederherstellen der Admin-Buttons für Event {event_id}: {e}")
 
     scheduler.start()
     print(f"Bot gestartet als {bot.user} | Zeitzone: {TZ_NAME}")

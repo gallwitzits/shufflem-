@@ -311,41 +311,38 @@ async def send_swap_menu(interaction: discord.Interaction,
                            custom_id="swap_confirm", row=2)
         async def confirm(self_, interaction: discord.Interaction, button: discord.ui.Button):
             if not self_.player_a or not self_.player_b:
-                await interaction.response.send_message(
-                    "Bitte beide Spieler auswählen.", ephemeral=True
+                await interaction.response.edit_message(
+                    content="⚠️ Bitte beide Spieler auswählen.", view=self_
                 )
                 return
             if self_.player_a == self_.player_b:
-                await interaction.response.send_message(
-                    "Bitte zwei verschiedene Spieler auswählen.", ephemeral=True
+                await interaction.response.edit_message(
+                    content="⚠️ Bitte zwei verschiedene Spieler auswählen.", view=self_
                 )
                 return
+
+            await interaction.response.defer()
 
             from database import swap_players, get_groups_for_round, get_event
             ok = await swap_players(event_id, round_number, self_.player_a, self_.player_b)
             if not ok:
-                await interaction.response.send_message(
-                    "Tausch fehlgeschlagen – Spieler nicht gefunden.", ephemeral=True
+                await interaction.edit_original_response(
+                    content="❌ Tausch fehlgeschlagen – Spieler nicht gefunden.", view=None
                 )
                 return
 
-            # Gruppen-Embed aktualisieren
             new_groups, new_bench = await get_groups_for_round(event_id, round_number)
             event = await get_event(event_id)
             embeds, _ = build_groups_embeds(event, new_groups, new_bench)
 
-            # Originalnachricht updaten (parent message vom ephemeral)
-            await interaction.message.delete()
-            orig = interaction.message  # wird unten überschrieben
-            await interaction.response.send_message("✅ Spieler getauscht!", ephemeral=True)
+            await interaction.edit_original_response(content="✅ Spieler getauscht!", view=None)
 
-            # Gruppen-Message updaten über channel
+            # Gruppen-Message im Channel aktualisieren
             channel = interaction.channel
-            async for msg in channel.history(limit=10):
+            async for msg in channel.history(limit=15):
                 if msg.author == interaction.client.user and msg.embeds:
                     title = msg.embeds[0].title or ""
-                    if f"Runde {round_number}" in title:
-                        from views import make_groups_admin_view
+                    if "Shuffle" in title and "Runde" in title:
                         await msg.edit(embeds=embeds)
                         break
 
