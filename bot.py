@@ -12,7 +12,7 @@ import database as db
 import views as v
 from views import make_signup_view
 from shuffle import build_groups, can_build_group
-from database import get_bench_ids_from_last_round
+from database import get_bench_ids_from_last_round, get_groups_for_round
 
 load_dotenv()
 
@@ -111,7 +111,38 @@ async def _start_round(event: dict, message: discord.Message, round_number: int,
     # Frisch aus DB laden damit round_end_at befüllt ist
     updated_event = await db.get_event(event_id)
     embeds, mentions = v.build_groups_embeds(updated_event, groups, bench)
-    await message.edit(content=mentions, embeds=embeds, view=discord.ui.View())
+
+    # Admin-Buttons (Tauschen + Reshuffle) an die Gruppen-Nachricht hängen
+    admin_view = _make_groups_admin_view(event_id, round_number, message)
+    await message.edit(content=mentions, embeds=embeds, view=admin_view)
+
+
+def _make_groups_admin_view(event_id: int, round_number: int,
+                            message: discord.Message) -> discord.ui.View:
+    """Admin-Buttons: Spieler tauschen + manueller Reshuffle."""
+
+    async def on_swap(interaction: discord.Interaction):
+        groups, bench = await get_groups_for_round(event_id, round_number)
+        await v.send_swap_menu(interaction, event_id, round_number, groups, bench)
+
+    async def on_reshuffle(interaction: discord.Interaction):
+        event = await db.get_event(event_id)
+        if not event:
+            await interaction.response.send_message("Event nicht gefunden.", ephemeral=True)
+            return
+        current = event["current_round"]
+        if current >= 3:
+            await interaction.response.send_message(
+                "Runde 3 ist die letzte Runde – kein weiterer Reshuffle möglich.", ephemeral=True
+            )
+            return
+        await interaction.response.send_message(
+            f"🔀 Starte Runde {current + 1} jetzt...", ephemeral=True
+        )
+        await _start_round(event, message, round_number=current + 1,
+                           now_utc=datetime.now(tz=timezone.utc))
+
+    return v.make_groups_admin_view(event_id, round_number, on_swap, on_reshuffle)
 
 
 async def _finish_event(event: dict, message: discord.Message):
@@ -317,10 +348,21 @@ async def on_ready():
     # Persistente Views für aktive Events neu registrieren
     active_events = await db.get_active_events()
     for event in active_events:
+        event_id = event["id"]
         if event["status"] == "signup":
-            event_id = event["id"]
             view = make_signup_view(event_id)
             bot.add_view(view)
+        elif event["status"] == "running":
+            # Admin-Buttons für laufende Runden wiederherstellen
+            try:
+                channel = bot.get_channel(int(event["channel_id"]))
+                if channel and event.get("message_id"):
+                    message = await channel.fetch_message(int(event["message_id"]))
+                    round_number = event["current_round"]
+                    admin_view = _make_groups_admin_view(event_id, round_number, message)
+                    bot.add_view(admin_view)
+            except Exception:
+                pass
 
     scheduler.start()
     print(f"Bot gestartet als {bot.user} | Zeitzone: {TZ_NAME}")

@@ -221,6 +221,81 @@ async def get_bench_ids_from_last_round(event_id: int, round_number: int) -> set
         return {row[0] for row in rows}
 
 
+async def get_groups_for_round(event_id: int, round_number: int) -> tuple[list[dict], list[dict]]:
+    """Lädt die aktuellen Gruppen und Bench aus der DB für eine Runde."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT ga.user_id, s.username, s.role AS signup_role, ga.role AS assigned_role, ga.group_number "
+            "FROM group_assignments ga "
+            "JOIN signups s ON s.event_id = ga.event_id AND s.user_id = ga.user_id "
+            "WHERE ga.event_id = ? AND ga.round_number = ? "
+            "ORDER BY ga.group_number, ga.role",
+            (event_id, round_number)
+        )
+        rows = await cursor.fetchall()
+
+    groups_dict: dict[int, dict] = {}
+    bench: list[dict] = []
+
+    for row in rows:
+        player = {
+            "user_id":       row["user_id"],
+            "username":      row["username"],
+            "role":          row["signup_role"],
+            "assigned_role": row["assigned_role"],
+        }
+        gnum = row["group_number"]
+        if gnum == 0:
+            bench.append(player)
+        else:
+            if gnum not in groups_dict:
+                groups_dict[gnum] = {"tank": None, "healer": None, "dps": []}
+            ar = row["assigned_role"]
+            if ar == "tank":
+                groups_dict[gnum]["tank"] = player
+            elif ar == "healer":
+                groups_dict[gnum]["healer"] = player
+            else:
+                groups_dict[gnum]["dps"].append(player)
+
+    groups = [groups_dict[k] for k in sorted(groups_dict)]
+    return groups, bench
+
+
+async def swap_players(event_id: int, round_number: int,
+                       user_id_a: str, user_id_b: str) -> bool:
+    """
+    Tauscht zwei Spieler in der aktuellen Runde.
+    Swapped group_number UND assigned_role damit die Gruppenstruktur korrekt bleibt.
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "SELECT user_id, group_number, role FROM group_assignments "
+            "WHERE event_id = ? AND round_number = ? AND user_id IN (?, ?)",
+            (event_id, round_number, user_id_a, user_id_b)
+        )
+        rows = await cursor.fetchall()
+        if len(rows) != 2:
+            return False
+
+        data = {r[0]: {"group_number": r[1], "role": r[2]} for r in rows}
+        a, b = data[user_id_a], data[user_id_b]
+
+        await db.execute(
+            "UPDATE group_assignments SET group_number = ?, role = ? "
+            "WHERE event_id = ? AND round_number = ? AND user_id = ?",
+            (b["group_number"], b["role"], event_id, round_number, user_id_a)
+        )
+        await db.execute(
+            "UPDATE group_assignments SET group_number = ?, role = ? "
+            "WHERE event_id = ? AND round_number = ? AND user_id = ?",
+            (a["group_number"], a["role"], event_id, round_number, user_id_b)
+        )
+        await db.commit()
+        return True
+
+
 async def update_event_round(event_id: int, round_number: int, round_end_at: datetime):
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(

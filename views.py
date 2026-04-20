@@ -218,6 +218,144 @@ def build_stats_embed(stats: list[dict]) -> discord.Embed:
     return embed
 
 
+def make_groups_admin_view(event_id: int, round_number: int,
+                           on_swap, on_reshuffle) -> discord.ui.View:
+    """
+    Admin-Buttons die auf dem Gruppen-Embed erscheinen.
+    on_swap / on_reshuffle sind async Callbacks aus bot.py.
+    """
+
+    class GroupsAdminView(discord.ui.View):
+        def __init__(self):
+            super().__init__(timeout=None)
+
+        @discord.ui.button(label="🔄 Spieler tauschen", style=discord.ButtonStyle.primary,
+                           custom_id=f"groups_swap_{event_id}")
+        async def btn_swap(self_, interaction: discord.Interaction, button: discord.ui.Button):
+            if not interaction.user.guild_permissions.manage_guild:
+                await interaction.response.send_message(
+                    "Nur Admins können Spieler tauschen.", ephemeral=True
+                )
+                return
+            await on_swap(interaction)
+
+        @discord.ui.button(label="⏭️ Jetzt Reshuffle", style=discord.ButtonStyle.secondary,
+                           custom_id=f"groups_reshuffle_{event_id}")
+        async def btn_reshuffle(self_, interaction: discord.Interaction, button: discord.ui.Button):
+            if not interaction.user.guild_permissions.manage_guild:
+                await interaction.response.send_message(
+                    "Nur Admins können den Reshuffle auslösen.", ephemeral=True
+                )
+                return
+            await on_reshuffle(interaction)
+
+    return GroupsAdminView()
+
+
+async def send_swap_menu(interaction: discord.Interaction,
+                         event_id: int, round_number: int,
+                         groups: list[dict], bench: list[dict]):
+    """
+    Sendet ein ephemeres Menü mit zwei Select-Menüs zum Spielertausch.
+    """
+    # Alle Spieler als Optionen aufbauen
+    def player_options(groups, bench):
+        opts = []
+        for i, g in enumerate(groups, 1):
+            for p in [g["tank"], g["healer"]] + g["dps"]:
+                if not p:
+                    continue
+                role_icon = ROLE_EMOJI.get(p["assigned_role"], "❓")
+                opts.append(discord.SelectOption(
+                    label=p["username"][:25],
+                    value=p["user_id"],
+                    description=f"Gruppe {i} – {role_icon} {p['assigned_role'].capitalize()}",
+                    emoji=role_icon
+                ))
+        for p in bench:
+            opts.append(discord.SelectOption(
+                label=p["username"][:25],
+                value=p["user_id"],
+                description="🪑 Bench",
+                emoji="🪑"
+            ))
+        return opts[:25]  # Discord-Limit
+
+    options = player_options(groups, bench)
+
+    if len(options) < 2:
+        await interaction.response.send_message(
+            "Nicht genug Spieler zum Tauschen.", ephemeral=True
+        )
+        return
+
+    class SwapView(discord.ui.View):
+        def __init__(self):
+            super().__init__(timeout=120)
+            self.player_a: str | None = None
+            self.player_b: str | None = None
+
+        @discord.ui.select(placeholder="Spieler 1 auswählen",
+                           options=options, custom_id="swap_a")
+        async def select_a(self_, interaction: discord.Interaction, select: discord.ui.Select):
+            self_.player_a = interaction.data["values"][0]
+            await interaction.response.defer()
+
+        @discord.ui.select(placeholder="Spieler 2 auswählen",
+                           options=options, custom_id="swap_b")
+        async def select_b(self_, interaction: discord.Interaction, select: discord.ui.Select):
+            self_.player_b = interaction.data["values"][0]
+            await interaction.response.defer()
+
+        @discord.ui.button(label="✅ Tauschen", style=discord.ButtonStyle.success,
+                           custom_id="swap_confirm", row=2)
+        async def confirm(self_, interaction: discord.Interaction, button: discord.ui.Button):
+            if not self_.player_a or not self_.player_b:
+                await interaction.response.send_message(
+                    "Bitte beide Spieler auswählen.", ephemeral=True
+                )
+                return
+            if self_.player_a == self_.player_b:
+                await interaction.response.send_message(
+                    "Bitte zwei verschiedene Spieler auswählen.", ephemeral=True
+                )
+                return
+
+            from database import swap_players, get_groups_for_round, get_event
+            ok = await swap_players(event_id, round_number, self_.player_a, self_.player_b)
+            if not ok:
+                await interaction.response.send_message(
+                    "Tausch fehlgeschlagen – Spieler nicht gefunden.", ephemeral=True
+                )
+                return
+
+            # Gruppen-Embed aktualisieren
+            new_groups, new_bench = await get_groups_for_round(event_id, round_number)
+            event = await get_event(event_id)
+            embeds, _ = build_groups_embeds(event, new_groups, new_bench)
+
+            # Originalnachricht updaten (parent message vom ephemeral)
+            await interaction.message.delete()
+            orig = interaction.message  # wird unten überschrieben
+            await interaction.response.send_message("✅ Spieler getauscht!", ephemeral=True)
+
+            # Gruppen-Message updaten über channel
+            channel = interaction.channel
+            async for msg in channel.history(limit=10):
+                if msg.author == interaction.client.user and msg.embeds:
+                    title = msg.embeds[0].title or ""
+                    if f"Runde {round_number}" in title:
+                        from views import make_groups_admin_view
+                        await msg.edit(embeds=embeds)
+                        break
+
+    await interaction.response.send_message(
+        "Wähle die beiden Spieler die getauscht werden sollen:",
+        view=SwapView(),
+        ephemeral=True
+    )
+
+
 def build_cancelled_embed() -> discord.Embed:
     return discord.Embed(
         title="❌ M+ Shuffle – Abgebrochen",
