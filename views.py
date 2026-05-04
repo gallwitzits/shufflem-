@@ -123,8 +123,8 @@ def build_groups_embeds(event: dict, groups: list[dict],
         color = GROUP_COLORS[(i - 1) % len(GROUP_COLORS)]
         embed = discord.Embed(title=f"📦 Gruppe {i}", color=color)
 
-        tank   = group["tank"]
-        healer = group["healer"]
+        tank   = group.get("tank")
+        healer = group.get("healer")
 
         # Flex-Hinweis wenn Spieler eigentlich eine andere Haupt-Rolle hat
         def flex_note(player, assigned):
@@ -133,28 +133,40 @@ def build_groups_embeds(event: dict, groups: list[dict],
                 return f" *({_role_display(player['role'])})*"
             return ""
 
+        def player_line(player, assigned):
+            if not player:
+                return "–"
+            return (
+                f"<@{player['user_id']}>\n"
+                f"{player['username']}{flex_note(player, assigned)}"
+            )
+
         embed.add_field(
             name="🛡️ Tank",
-            value=f"<@{tank['user_id']}>\n{tank['username']}{flex_note(tank, 'tank')}",
+            value=player_line(tank, "tank"),
             inline=True
         )
         embed.add_field(
             name="💚 Heiler",
-            value=f"<@{healer['user_id']}>\n{healer['username']}{flex_note(healer, 'healer')}",
+            value=player_line(healer, "healer"),
             inline=True
         )
         embed.add_field(name="\u200b", value="\u200b", inline=True)
 
+        dps_players = [p for p in group.get("dps", []) if p]
         dps_value = "\n".join(
             f"<@{p['user_id']}> {p['username']}{flex_note(p, 'dps')}"
-            for p in group["dps"]
-        )
+            for p in dps_players
+        ) or "–"
         embed.add_field(name="⚔️ DDs", value=dps_value, inline=False)
 
         group_embeds.append(embed)
 
-        all_mentions += [f"<@{tank['user_id']}>", f"<@{healer['user_id']}>"]
-        all_mentions += [f"<@{p['user_id']}>" for p in group["dps"]]
+        if tank:
+            all_mentions.append(f"<@{tank['user_id']}>")
+        if healer:
+            all_mentions.append(f"<@{healer['user_id']}>")
+        all_mentions += [f"<@{p['user_id']}>" for p in dps_players]
 
     mentions_content = f"**Runde {round_num} startet!** " + " ".join(all_mentions)
     return [header] + group_embeds, mentions_content
@@ -219,10 +231,10 @@ def build_stats_embed(stats: list[dict]) -> discord.Embed:
 
 
 def make_groups_admin_view(event_id: int, round_number: int,
-                           on_swap, on_reshuffle, on_remove) -> discord.ui.View:
+                           on_swap, on_reshuffle, on_remove, on_add) -> discord.ui.View:
     """
     Admin-Buttons die auf dem Gruppen-Embed erscheinen.
-    on_swap / on_reshuffle sind async Callbacks aus bot.py.
+    Callbacks kommen aus bot.py, weil dort Bot/Message-Kontext verfügbar ist.
     """
 
     class GroupsAdminView(discord.ui.View):
@@ -259,6 +271,16 @@ def make_groups_admin_view(event_id: int, round_number: int,
                 return
             await on_remove(interaction)
 
+        @discord.ui.button(label="➕ Spieler hinzufügen", style=discord.ButtonStyle.success,
+                           custom_id=f"groups_add_{event_id}")
+        async def btn_add(self_, interaction: discord.Interaction, button: discord.ui.Button):
+            if not interaction.user.guild_permissions.manage_guild:
+                await interaction.response.send_message(
+                    "Nur Admins können Spieler hinzufügen.", ephemeral=True
+                )
+                return
+            await on_add(interaction)
+
     return GroupsAdminView()
 
 
@@ -268,6 +290,8 @@ async def send_swap_menu(interaction: discord.Interaction,
     """
     Sendet ein ephemeres Menü mit zwei Select-Menüs zum Spielertausch.
     """
+    source_message = interaction.message
+
     # Alle Spieler als Optionen aufbauen
     def player_options(groups, bench):
         opts = []
@@ -348,13 +372,8 @@ async def send_swap_menu(interaction: discord.Interaction,
             await interaction.edit_original_response(content="✅ Spieler getauscht!", view=None)
 
             # Gruppen-Message im Channel aktualisieren
-            channel = interaction.channel
-            async for msg in channel.history(limit=15):
-                if msg.author == interaction.client.user and msg.embeds:
-                    title = msg.embeds[0].title or ""
-                    if "Shuffle" in title and "Runde" in title:
-                        await msg.edit(embeds=embeds)
-                        break
+            if source_message:
+                await source_message.edit(embeds=embeds)
 
     await interaction.response.send_message(
         "Wähle die beiden Spieler die getauscht werden sollen:",
@@ -367,6 +386,8 @@ async def send_remove_menu(interaction: discord.Interaction,
                            event_id: int, round_number: int,
                            groups: list[dict], bench: list[dict]):
     """Ephemeres Menü zum Entfernen eines Spielers aus dem gesamten Event."""
+    source_message = interaction.message
+
     opts = []
     for i, g in enumerate(groups, 1):
         for p in [g["tank"], g["healer"]] + g["dps"]:
@@ -423,13 +444,8 @@ async def send_remove_menu(interaction: discord.Interaction,
 
             await interaction.edit_original_response(content="✅ Spieler entfernt!", view=None)
 
-            channel = interaction.channel
-            async for msg in channel.history(limit=15):
-                if msg.author == interaction.client.user and msg.embeds:
-                    title = msg.embeds[0].title or ""
-                    if "Shuffle" in title and "Runde" in title:
-                        await msg.edit(embeds=embeds)
-                        break
+            if source_message:
+                await source_message.edit(embeds=embeds)
 
     await interaction.response.send_message(
         "Wähle den Spieler der aus dem Event entfernt werden soll:",
@@ -504,4 +520,82 @@ def make_signup_view(event_id: int) -> discord.ui.View:
             await _refresh_signup(interaction, event_id)
             await interaction.response.send_message("Du wurdest abgemeldet.", ephemeral=True)
 
+        @discord.ui.button(label="➖ Spieler entfernen", style=discord.ButtonStyle.secondary,
+                           custom_id=f"signup_admin_remove_{event_id}", row=1)
+        async def btn_admin_remove(self_, interaction: discord.Interaction,
+                                   button: discord.ui.Button):
+            if not interaction.user.guild_permissions.manage_guild:
+                await interaction.response.send_message(
+                    "Nur Admins können andere Spieler entfernen.", ephemeral=True
+                )
+                return
+
+            event = await get_event(event_id)
+            if not event or event["status"] != "signup":
+                await interaction.response.send_message(
+                    "Spieler können über diesen Button nur vor dem Start entfernt werden.",
+                    ephemeral=True
+                )
+                return
+
+            await send_signup_remove_menu(interaction, event_id)
+
     return DynamicSignupView()
+
+
+async def send_signup_remove_menu(interaction: discord.Interaction, event_id: int):
+    """Ephemeres Admin-Menü zum Entfernen vergessener Anmeldungen vor Eventstart."""
+    source_message = interaction.message
+
+    class SignupRemoveView(discord.ui.View):
+        def __init__(self):
+            super().__init__(timeout=120)
+            self.player = None
+
+        @discord.ui.select(cls=discord.ui.UserSelect,
+                           placeholder="Spieler auswählen",
+                           min_values=1, max_values=1,
+                           custom_id="signup_remove_user")
+        async def select_player(self_, interaction: discord.Interaction,
+                                select: discord.ui.UserSelect):
+            self_.player = select.values[0]
+            await interaction.response.defer()
+
+        @discord.ui.button(label="✅ Entfernen", style=discord.ButtonStyle.danger,
+                           custom_id="signup_remove_confirm", row=1)
+        async def confirm(self_, interaction: discord.Interaction,
+                          button: discord.ui.Button):
+            if not self_.player:
+                await interaction.response.edit_message(
+                    content="⚠️ Bitte zuerst einen Spieler auswählen.", view=self_
+                )
+                return
+
+            event = await get_event(event_id)
+            if not event or event["status"] != "signup":
+                await interaction.response.edit_message(
+                    content="Das Event ist nicht mehr in der Anmeldung.", view=None
+                )
+                return
+
+            user_id = str(self_.player.id)
+            signups = await get_signups(event_id)
+            was_signed_up = any(s["user_id"] == user_id for s in signups)
+
+            if was_signed_up:
+                await remove_signup(event_id, user_id)
+                signups = await get_signups(event_id)
+                embed = build_signup_embed(event, signups)
+                if source_message:
+                    await source_message.edit(embed=embed)
+                content = f"{self_.player.mention} wurde aus der Anmeldung entfernt."
+            else:
+                content = f"{self_.player.mention} war für dieses Event nicht angemeldet."
+
+            await interaction.response.edit_message(content=content, view=None)
+
+    await interaction.response.send_message(
+        "Wähle den Spieler, der aus der Anmeldung entfernt werden soll:",
+        view=SignupRemoveView(),
+        ephemeral=True
+    )

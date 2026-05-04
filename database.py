@@ -49,6 +49,18 @@ async def init_db():
                 FOREIGN KEY (event_id) REFERENCES events(id)
             )
         """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS voice_channels (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_id INTEGER NOT NULL,
+                round_number INTEGER NOT NULL,
+                group_number INTEGER NOT NULL,
+                channel_id TEXT NOT NULL,
+                created_at TEXT DEFAULT (datetime('now')),
+                UNIQUE(event_id, round_number, group_number),
+                FOREIGN KEY (event_id) REFERENCES events(id)
+            )
+        """)
         await db.commit()
 
 
@@ -124,6 +136,44 @@ async def add_signup(event_id: int, user_id: str, username: str, role: str):
         await db.commit()
 
 
+async def get_assignment_for_round(event_id: int, round_number: int,
+                                   user_id: str) -> Optional[dict]:
+    """Lädt die aktuelle Runden-Zuweisung eines Spielers, falls vorhanden."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT ga.user_id, s.username, s.role AS signup_role, "
+            "ga.role AS assigned_role, ga.group_number "
+            "FROM group_assignments ga "
+            "JOIN signups s ON s.event_id = ga.event_id AND s.user_id = ga.user_id "
+            "WHERE ga.event_id = ? AND ga.round_number = ? AND ga.user_id = ?",
+            (event_id, round_number, user_id)
+        )
+        row = await cursor.fetchone()
+        return dict(row) if row else None
+
+
+async def add_player_to_round_bench(event_id: int, round_number: int,
+                                    user_id: str, role: str) -> bool:
+    """Setzt einen nachträglich hinzugefügten Spieler auf die Bench der aktuellen Runde."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "SELECT 1 FROM group_assignments "
+            "WHERE event_id = ? AND round_number = ? AND user_id = ?",
+            (event_id, round_number, user_id)
+        )
+        if await cursor.fetchone():
+            return False
+
+        await db.execute(
+            "INSERT INTO group_assignments (event_id, round_number, group_number, user_id, role) "
+            "VALUES (?, ?, 0, ?, ?)",
+            (event_id, round_number, user_id, role)
+        )
+        await db.commit()
+        return True
+
+
 async def remove_signup(event_id: int, user_id: str):
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
@@ -158,34 +208,61 @@ async def get_signups(event_id: int) -> list[dict]:
         return [dict(row) for row in rows]
 
 
+async def _insert_group_assignments(db, event_id: int, round_number: int,
+                                    groups: list[dict], bench: list[dict]):
+    # Gruppen speichern (group_number >= 1)
+    for g_num, group in enumerate(groups, start=1):
+        tank = group.get("tank")
+        if tank:
+            await db.execute(
+                "INSERT INTO group_assignments (event_id, round_number, group_number, user_id, role) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (event_id, round_number, g_num, tank["user_id"], "tank")
+            )
+
+        healer = group.get("healer")
+        if healer:
+            await db.execute(
+                "INSERT INTO group_assignments (event_id, round_number, group_number, user_id, role) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (event_id, round_number, g_num, healer["user_id"], "healer")
+            )
+
+        for dps in group.get("dps", []):
+            if not dps:
+                continue
+            await db.execute(
+                "INSERT INTO group_assignments (event_id, round_number, group_number, user_id, role) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (event_id, round_number, g_num, dps["user_id"], "dps")
+            )
+
+    # Bench speichern (group_number = 0) für faire Rotation in der nächsten Runde
+    for player in bench:
+        await db.execute(
+            "INSERT INTO group_assignments (event_id, round_number, group_number, user_id, role) "
+            "VALUES (?, ?, 0, ?, ?)",
+            (event_id, round_number, player["user_id"],
+             player.get("assigned_role") or player["role"])
+        )
+
+
 async def save_group_assignments(event_id: int, round_number: int,
                                   groups: list[dict], bench: list[dict]):
     async with aiosqlite.connect(DB_PATH) as db:
-        # Gruppen speichern (group_number >= 1)
-        for g_num, group in enumerate(groups, start=1):
-            await db.execute(
-                "INSERT INTO group_assignments (event_id, round_number, group_number, user_id, role) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (event_id, round_number, g_num, group["tank"]["user_id"], "tank")
-            )
-            await db.execute(
-                "INSERT INTO group_assignments (event_id, round_number, group_number, user_id, role) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (event_id, round_number, g_num, group["healer"]["user_id"], "healer")
-            )
-            for dps in group["dps"]:
-                await db.execute(
-                    "INSERT INTO group_assignments (event_id, round_number, group_number, user_id, role) "
-                    "VALUES (?, ?, ?, ?, ?)",
-                    (event_id, round_number, g_num, dps["user_id"], "dps")
-                )
-        # Bench speichern (group_number = 0) für faire Rotation in der nächsten Runde
-        for player in bench:
-            await db.execute(
-                "INSERT INTO group_assignments (event_id, round_number, group_number, user_id, role) "
-                "VALUES (?, ?, 0, ?, ?)",
-                (event_id, round_number, player["user_id"], player["role"])
-            )
+        await _insert_group_assignments(db, event_id, round_number, groups, bench)
+        await db.commit()
+
+
+async def replace_group_assignments(event_id: int, round_number: int,
+                                    groups: list[dict], bench: list[dict]):
+    """Ersetzt die Assignments einer Runde, z.B. nachdem aus Bench-Spielern neue Gruppen entstehen."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "DELETE FROM group_assignments WHERE event_id = ? AND round_number = ?",
+            (event_id, round_number)
+        )
+        await _insert_group_assignments(db, event_id, round_number, groups, bench)
         await db.commit()
 
 
@@ -325,4 +402,56 @@ async def finish_event(event_id: int):
             "UPDATE events SET status = 'finished', round_end_at = NULL WHERE id = ?",
             (event_id,)
         )
+        await db.commit()
+
+
+async def save_voice_channels(event_id: int, round_number: int,
+                              channels: list[dict]):
+    async with aiosqlite.connect(DB_PATH) as db:
+        for channel in channels:
+            await db.execute(
+                "INSERT INTO voice_channels (event_id, round_number, group_number, channel_id) "
+                "VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(event_id, round_number, group_number) "
+                "DO UPDATE SET channel_id = excluded.channel_id",
+                (
+                    event_id,
+                    round_number,
+                    channel["group_number"],
+                    str(channel["channel_id"]),
+                )
+            )
+        await db.commit()
+
+
+async def get_voice_channels(event_id: int, round_number: int | None = None) -> list[dict]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        if round_number is None:
+            cursor = await db.execute(
+                "SELECT * FROM voice_channels WHERE event_id = ? ORDER BY round_number, group_number",
+                (event_id,)
+            )
+        else:
+            cursor = await db.execute(
+                "SELECT * FROM voice_channels WHERE event_id = ? AND round_number = ? "
+                "ORDER BY group_number",
+                (event_id, round_number)
+            )
+        rows = await cursor.fetchall()
+        return [dict(row) for row in rows]
+
+
+async def clear_voice_channels(event_id: int, round_number: int | None = None):
+    async with aiosqlite.connect(DB_PATH) as db:
+        if round_number is None:
+            await db.execute(
+                "DELETE FROM voice_channels WHERE event_id = ?",
+                (event_id,)
+            )
+        else:
+            await db.execute(
+                "DELETE FROM voice_channels WHERE event_id = ? AND round_number = ?",
+                (event_id, round_number)
+            )
         await db.commit()

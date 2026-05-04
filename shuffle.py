@@ -88,14 +88,8 @@ def build_groups(signups: list[dict],
 
 def can_build_group(signups: list[dict]) -> bool:
     """Prüft ob mindestens eine vollständige Gruppe gebildet werden kann."""
-    for s in signups:
-        if "roles" not in s:
-            s["roles"] = [r.strip() for r in s["role"].split(",")]
-
-    tank_capable   = sum(1 for s in signups if "tank"   in s["roles"])
-    healer_capable = sum(1 for s in signups if "healer" in s["roles"])
-    dps_capable    = sum(1 for s in signups if "dps"    in s["roles"])
-    return tank_capable >= 1 and healer_capable >= 1 and dps_capable >= 3
+    groups, _ = build_groups([dict(s) for s in signups])
+    return bool(groups)
 
 
 def count_possible_groups(signups: list[dict]) -> int:
