@@ -22,11 +22,16 @@ async def init_db():
                 created_at TEXT DEFAULT (datetime('now'))
             )
         """)
-        # Spalte nachträglich hinzufügen falls DB schon existiert (Migration)
-        try:
-            await db.execute("ALTER TABLE events ADD COLUMN repeat_days INTEGER")
-        except Exception:
-            pass
+        # Spalten nachträglich hinzufügen falls DB schon existiert (Migration)
+        for col in [
+            "ALTER TABLE events ADD COLUMN repeat_days INTEGER",
+            "ALTER TABLE events ADD COLUMN is_paused INTEGER DEFAULT 0",
+            "ALTER TABLE events ADD COLUMN paused_at TEXT",
+        ]:
+            try:
+                await db.execute(col)
+            except Exception:
+                pass
         await db.execute("""
             CREATE TABLE IF NOT EXISTS signups (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -82,7 +87,7 @@ async def cancel_recurring_for_channel(channel_id: str):
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
             "UPDATE events SET repeat_days = NULL "
-            "WHERE channel_id = ? AND status IN ('signup', 'running')",
+            "WHERE channel_id = ? AND status IN ('signup', 'running', 'cooldown')",
             (channel_id,)
         )
         await db.commit()
@@ -101,7 +106,7 @@ async def get_active_events() -> list[dict]:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
-            "SELECT * FROM events WHERE status IN ('signup', 'running')"
+            "SELECT * FROM events WHERE status IN ('signup', 'running', 'cooldown')"
         )
         rows = await cursor.fetchall()
         return [dict(row) for row in rows]
@@ -119,7 +124,7 @@ async def get_active_event_for_channel(channel_id: str) -> Optional[dict]:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
-            "SELECT * FROM events WHERE channel_id = ? AND status IN ('signup', 'running') LIMIT 1",
+            "SELECT * FROM events WHERE channel_id = ? AND status IN ('signup', 'running', 'cooldown') LIMIT 1",
             (channel_id,)
         )
         row = await cursor.fetchone()
@@ -385,6 +390,45 @@ async def swap_players(event_id: int, round_number: int,
         )
         await db.commit()
         return True
+
+
+async def pause_event(event_id: int, now: datetime):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE events SET is_paused = 1, paused_at = ? WHERE id = ?",
+            (now.isoformat(), event_id)
+        )
+        await db.commit()
+
+
+async def resume_event(event_id: int, now: datetime):
+    """Setzt is_paused=0 und verlängert round_end_at um die pausierte Zeit."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT paused_at, round_end_at FROM events WHERE id = ?", (event_id,)
+        )
+        row = await cursor.fetchone()
+        if not row or not row["paused_at"]:
+            return
+        paused_at = datetime.fromisoformat(row["paused_at"])
+        round_end_at = datetime.fromisoformat(row["round_end_at"])
+        extra = now - paused_at
+        new_end = round_end_at + extra
+        await db.execute(
+            "UPDATE events SET is_paused = 0, paused_at = NULL, round_end_at = ? WHERE id = ?",
+            (new_end.isoformat(), event_id)
+        )
+        await db.commit()
+
+
+async def start_cooldown(event_id: int, cooldown_end: datetime):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE events SET status = 'cooldown', round_end_at = ? WHERE id = ?",
+            (cooldown_end.isoformat(), event_id)
+        )
+        await db.commit()
 
 
 async def update_event_round(event_id: int, round_number: int, round_end_at: datetime):

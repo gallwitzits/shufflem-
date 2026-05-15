@@ -101,18 +101,33 @@ def build_groups_embeds(event: dict, groups: list[dict],
     round_num = event["current_round"]
 
     header = discord.Embed(
-        title=f"🎲 M+ Shuffle – Runde {round_num} / 3",
+        title=f"🎲 M+ Shuffle – Runde {round_num} / 4",
         color=discord.Color.gold()
     )
-    if event.get("round_end_at"):
-        header.description = f"⏰ Nächster Shuffle: {_discord_timestamp(event['round_end_at'])}"
+    is_cooldown = event.get("status") == "cooldown"
+    is_paused = bool(event.get("is_paused"))
 
+    if is_paused:
+        header.color = discord.Color.orange()
+        header.title = f"⏸️ M+ Shuffle – Runde {round_num} / 4 – PAUSIERT"
+        header.description = "⏸️ **Timer ist pausiert.** Ein Admin setzt ihn fort."
+    elif is_cooldown:
+        header.title = f"🎲 M+ Shuffle – Runde {round_num} / 4 ✅"
+        if event.get("round_end_at"):
+            header.description = f"🏁 Letzte Runde vorbei! Event endet: {_discord_timestamp(event['round_end_at'])}"
+    elif event.get("round_end_at"):
+        if round_num == 4:
+            header.description = f"⏰ Letzte Runde endet: {_discord_timestamp(event['round_end_at'])}"
+        else:
+            header.description = f"⏰ Nächster Shuffle: {_discord_timestamp(event['round_end_at'])}"
+
+    bench_label = "🪑 Bench" if is_cooldown or round_num == 4 else "🪑 Bench – spielt nächste Runde"
     if bench:
         bench_str = "  ".join(
             f"{ROLE_EMOJI.get(p.get('assigned_role', p['role']), '❓')} {p['username']}"
             for p in bench
         )
-        header.add_field(name="🪑 Bench – spielt nächste Runde", value=bench_str, inline=False)
+        header.add_field(name=bench_label, value=bench_str, inline=False)
     else:
         header.add_field(name="🪑 Bench", value="–", inline=False)
 
@@ -176,7 +191,7 @@ def build_finished_embed(event: dict, signups: list[dict]) -> discord.Embed:
     embed = discord.Embed(
         title="🏁 M+ Shuffle – Beendet",
         description=(
-            f"**3 Runden** gespielt  |  **{len(signups)} Teilnehmer**\n"
+            f"**4 Runden** gespielt  |  **{len(signups)} Teilnehmer**\n"
             "Danke fürs Mitspielen! 🎉"
         ),
         color=discord.Color.green()
@@ -231,7 +246,7 @@ def build_stats_embed(stats: list[dict]) -> discord.Embed:
 
 
 def make_groups_admin_view(event_id: int, round_number: int,
-                           on_swap, on_reshuffle, on_remove, on_add) -> discord.ui.View:
+                           on_swap, on_reshuffle, on_remove, on_add, on_pause) -> discord.ui.View:
     """
     Admin-Buttons die auf dem Gruppen-Embed erscheinen.
     Callbacks kommen aus bot.py, weil dort Bot/Message-Kontext verfügbar ist.
@@ -280,6 +295,16 @@ def make_groups_admin_view(event_id: int, round_number: int,
                 )
                 return
             await on_add(interaction)
+
+        @discord.ui.button(label="⏸️ Pause", style=discord.ButtonStyle.secondary,
+                           custom_id=f"groups_pause_{event_id}", row=1)
+        async def btn_pause(self_, interaction: discord.Interaction, button: discord.ui.Button):
+            if not interaction.user.guild_permissions.manage_guild:
+                await interaction.response.send_message(
+                    "Nur Admins können den Timer pausieren.", ephemeral=True
+                )
+                return
+            await on_pause(interaction)
 
     return GroupsAdminView()
 

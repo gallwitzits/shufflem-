@@ -50,7 +50,7 @@ async def scheduler():
     Läuft alle 30 Sekunden und verwaltet den Lebenszyklus aller Events:
     - Startet Runde 1 wenn scheduled_at <= now
     - Reshuffelt nach jeder Runde
-    - Beendet das Event nach Runde 3
+    - Beendet das Event nach Runde 4
     """
     now_utc = datetime.now(tz=timezone.utc)
     active_events = await db.get_active_events()
@@ -71,15 +71,21 @@ async def scheduler():
             if now_utc >= scheduled:
                 await _start_round(event, message, round_number=1, now_utc=now_utc)
 
-        # --- Laufende Runde: prüfen ob Rundenende erreicht ---
-        elif event["status"] == "running" and event.get("round_end_at"):
+        # --- Laufende Runde: prüfen ob Rundenende erreicht (nur wenn nicht pausiert) ---
+        elif event["status"] == "running" and event.get("round_end_at") and not event.get("is_paused"):
             round_end = datetime.fromisoformat(event["round_end_at"]).replace(tzinfo=timezone.utc)
             if now_utc >= round_end:
                 current = event["current_round"]
-                if current < 3:
+                if current < 4:
                     await _start_round(event, message, round_number=current + 1, now_utc=now_utc)
                 else:
-                    await _finish_event(event, message)
+                    await _start_cooldown(event, message, now_utc)
+
+        # --- Cooldown nach letzter Runde ---
+        elif event["status"] == "cooldown" and event.get("round_end_at") and not event.get("is_paused"):
+            cooldown_end = datetime.fromisoformat(event["round_end_at"]).replace(tzinfo=timezone.utc)
+            if now_utc >= cooldown_end:
+                await _finish_event(event, message)
 
 
 async def _start_round(event: dict, message: discord.Message, round_number: int, now_utc: datetime):
@@ -114,7 +120,7 @@ async def _start_round(event: dict, message: discord.Message, round_number: int,
     updated_event = await db.get_event(event_id)
     embeds, mentions = v.build_groups_embeds(updated_event, groups, bench)
     await _ensure_voice_channels_for_round(
-        updated_event, message.channel, groups, reset_existing=True
+        updated_event, message.channel, groups, reset_existing=False
     )
 
     # Admin-Buttons (Tauschen + Reshuffle) an die Gruppen-Nachricht hängen
@@ -136,9 +142,9 @@ def _make_groups_admin_view(event_id: int, round_number: int,
             await interaction.response.send_message("Event nicht gefunden.", ephemeral=True)
             return
         current = event["current_round"]
-        if current >= 3:
+        if current >= 4:
             await interaction.response.send_message(
-                "Runde 3 ist die letzte Runde – kein weiterer Reshuffle möglich.", ephemeral=True
+                "Runde 4 ist die letzte Runde – kein weiterer Reshuffle möglich.", ephemeral=True
             )
             return
         await interaction.response.send_message(
@@ -151,12 +157,45 @@ def _make_groups_admin_view(event_id: int, round_number: int,
         groups, bench = await get_groups_for_round(event_id, round_number)
         await v.send_remove_menu(interaction, event_id, round_number, groups, bench)
 
+    async def on_pause(interaction: discord.Interaction):
+        event = await db.get_event(event_id)
+        if not event:
+            await interaction.response.send_message("Event nicht gefunden.", ephemeral=True)
+            return
+        now_utc = datetime.now(tz=timezone.utc)
+        if event.get("is_paused"):
+            await db.resume_event(event_id, now_utc)
+            await interaction.response.send_message("▶️ Timer fortgesetzt.", ephemeral=True)
+        else:
+            await db.pause_event(event_id, now_utc)
+            await interaction.response.send_message("⏸️ Timer pausiert.", ephemeral=True)
+
+        # Embed sofort aktualisieren damit Pause-Anzeige sichtbar wird
+        updated_event = await db.get_event(event_id)
+        groups, bench = await get_groups_for_round(event_id, round_number)
+        embeds, _ = v.build_groups_embeds(updated_event, groups, bench)
+        await message.edit(embeds=embeds)
+
     async def on_add(interaction: discord.Interaction):
         await _send_add_player_menu(interaction, event_id, round_number, message)
 
     return v.make_groups_admin_view(
-        event_id, round_number, on_swap, on_reshuffle, on_remove, on_add
+        event_id, round_number, on_swap, on_reshuffle, on_remove, on_add, on_pause
     )
+
+
+async def _start_cooldown(event: dict, message: discord.Message, now_utc: datetime):
+    """10-Minuten Puffer nach der letzten Runde bevor das Event endet."""
+    event_id = event["id"]
+    cooldown_end = now_utc + timedelta(minutes=10)
+    await db.start_cooldown(event_id, cooldown_end)
+
+    updated_event = await db.get_event(event_id)
+    groups, bench = await get_groups_for_round(event_id, event["current_round"])
+    embeds, _ = v.build_groups_embeds(updated_event, groups, bench)
+
+    admin_view = _make_groups_admin_view(event_id, event["current_round"], message)
+    await message.edit(embeds=embeds, view=admin_view)
 
 
 async def _finish_event(event: dict, message: discord.Message):
@@ -328,8 +367,9 @@ async def _ensure_voice_channels_for_round(event: dict, channel,
     if category is None:
         return []
 
-    existing = await db.get_voice_channels(event_id, round_number)
-    existing_by_group = {record["group_number"]: record for record in existing}
+    # Alle Channels des Events laden (round-übergreifend) um Wiederverwendung zu ermöglichen
+    all_existing = await db.get_voice_channels(event_id)
+    existing_by_group = {record["group_number"]: record for record in all_existing}
     created_records = []
     created_channels = []
 
