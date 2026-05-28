@@ -1,0 +1,187 @@
+# Shufflem
+
+Shufflem ist ein Discord-Bot fuer World of Warcraft Mythic+ Shuffle-Events. Der Bot organisiert Anmeldungen, bildet automatisch faire 5er-Gruppen und reshuffelt die Spieler ueber mehrere Runden hinweg.
+
+Das Tool ist besonders fuer Gilden, Communities oder feste M+ Gruppen gedacht, die mehrere Dungeon-Runs parallel planen moechten, ohne Gruppen manuell zusammenstellen und Spieler auf der Bench im Blick behalten zu muessen.
+
+## Was kann Shufflem?
+
+- Erstellt M+ Shuffle-Events per Discord Slash Command
+- Verwaltet Anmeldungen direkt ueber Discord Buttons und Dropdowns
+- Unterstuetzt Rollenwahl fuer Tank, Heiler, DD und Flex-Spieler
+- Bildet automatisch vollstaendige M+ Gruppen aus 1 Tank, 1 Heiler und 3 DDs
+- Priorisiert Spieler von der Bench in der naechsten Runde
+- Fuehrt bis zu 4 Runden pro Event aus
+- Reshuffelt Gruppen automatisch nach Ablauf der Rundendauer
+- Erlaubt Admins manuelle Eingriffe waehrend eines Events
+- Erstellt optional Voice-Channels pro Gruppe in einer Discord-Kategorie
+- Postet am Ende eine Statistik mit gespielten Runden und Bench-Runden
+- Unterstuetzt wiederkehrende Events, zum Beispiel taeglich oder woechentlich
+
+## Wofuer kann Shufflem verwendet werden?
+
+Shufflem eignet sich fuer organisierte World of Warcraft Mythic+ Abende, bei denen viele Spieler teilnehmen und in mehreren Runden durchgemischt werden sollen.
+
+Typische Einsatzzwecke:
+
+- Gildeninterne M+ Shuffle-Abende
+- Community-Events mit mehreren parallelen Gruppen
+- Faire Rotation zwischen aktiven Gruppen und Bench
+- Spontane M+ Sessions mit automatischer Rollenverteilung
+- Regelmaessige Events, die wiederholt im selben Discord-Channel stattfinden
+
+## Ablauf eines Events
+
+1. Ein Admin erstellt ein Event mit `/shuffle create`.
+2. Spieler melden sich ueber das Dropdown als Tank, Heiler, DD oder Flex-Spieler an.
+3. Zum geplanten Start baut der Bot automatisch die erste Runde.
+4. Nach jeder Rundendauer wird neu gemischt.
+5. Bench-Spieler werden bei der naechsten Gruppenzuteilung bevorzugt.
+6. Nach Runde 4 endet das Event.
+7. Der Bot postet eine Abschlussmeldung und eine Statistik.
+
+## Installation
+
+### Voraussetzungen
+
+- Python 3.11 oder neuer
+- Ein Discord Bot Token
+- Ein Discord Server, auf dem der Bot eingeladen ist
+
+### Projekt installieren
+
+```bash
+pip install -r requirements.txt
+```
+
+### Umgebungsvariablen einrichten
+
+Kopiere `.env.example` zu `.env` und trage deinen Discord Token ein:
+
+```env
+DISCORD_TOKEN=dein_token_hier
+TIMEZONE=Europe/Berlin
+```
+
+Optional kann die Discord-Kategorie fuer automatisch erstellte Voice-Channels gesetzt werden:
+
+```env
+VOICE_CATEGORY_NAME=Lobby
+```
+
+Wenn die Variable nicht gesetzt ist, verwendet Shufflem standardmaessig die Kategorie `Lobby`.
+
+### Bot starten
+
+```bash
+python bot.py
+```
+
+Beim Start synchronisiert der Bot seine Slash Commands und stellt aktive Event-Views wieder her.
+
+## Discord Bot einladen
+
+Beim Erstellen der OAuth2-Einladungs-URL sollten diese Scopes gesetzt werden:
+
+- `bot`
+- `applications.commands`
+
+Empfohlene Bot-Berechtigungen:
+
+- Nachrichten senden
+- Channels ansehen
+- Nachrichtenverlauf lesen
+- Embeds einbetten
+- Channels verwalten, falls Voice-Channels automatisch erstellt und geloescht werden sollen
+
+## Verwendung
+
+### Event erstellen
+
+```text
+/shuffle create datum:15.04.2026 uhrzeit:20:00 rundendauer:45
+```
+
+Mit Wiederholung:
+
+```text
+/shuffle create datum:15.04.2026 uhrzeit:20:00 rundendauer:45 wiederholen:wöchentlich
+```
+
+Verfuegbare Wiederholungen:
+
+- `täglich`
+- `wöchentlich`
+- `2-wöchentlich`
+- `monatlich`
+
+### Wiederholung stoppen
+
+```text
+/shuffle stop
+```
+
+Das aktuelle Event laeuft weiter, aber es wird danach kein neues wiederkehrendes Event erstellt.
+
+### Spieler manuell hinzufuegen
+
+```text
+/shuffle add spieler:@Name rollen:Tank + DD
+```
+
+### Spieler entfernen
+
+```text
+/shuffle remove spieler:@Name
+```
+
+## Admin-Funktionen waehrend eines Events
+
+Admins mit der Discord-Berechtigung `Server verwalten` koennen waehrend eines laufenden Events:
+
+- Spieler tauschen
+- Sofort einen Reshuffle ausloesen
+- Spieler entfernen
+- Spieler hinzufuegen
+- Den Timer pausieren und fortsetzen
+
+Diese Aktionen sind direkt ueber die Buttons an der Gruppen-Nachricht verfuegbar.
+
+## Gruppenlogik
+
+Eine gueltige Mythic+ Gruppe besteht aus:
+
+- 1 Tank
+- 1 Heiler
+- 3 DDs
+
+Flex-Spieler koennen mehrere Rollen angeben. Shufflem weist sie nur einer Rolle pro Runde zu. Spieler, die in der letzten Runde auf der Bench waren, werden bei der naechsten Runde bevorzugt, damit die Rotation fairer bleibt.
+
+## Datenhaltung
+
+Shufflem speichert Events, Anmeldungen, Gruppenzuweisungen, Voice-Channel-Referenzen und Statistiken lokal in einer SQLite-Datenbank:
+
+```text
+shuffle.db
+```
+
+Die Datenbank wird beim Start automatisch erstellt, falls sie noch nicht existiert.
+
+## Projektstruktur
+
+```text
+bot.py          Discord Bot, Slash Commands und Scheduler
+views.py        Discord Embeds, Buttons, Dropdowns und Admin-Menues
+shuffle.py      Gruppenbildung und Shuffle-Logik
+database.py     SQLite-Datenbankzugriff
+ANLEITUNG.md    Ausfuehrliche Einrichtungsanleitung
+requirements.txt
+```
+
+## Sicherheit
+
+Lege deinen Discord Token nur in einer lokalen `.env` Datei oder als Hosting-Variable ab. Der Token darf nicht in GitHub committed oder oeffentlich geteilt werden.
+
+## Weitere Anleitung
+
+Eine ausfuehrlichere Schritt-fuer-Schritt-Anleitung findest du in [ANLEITUNG.md](ANLEITUNG.md).
