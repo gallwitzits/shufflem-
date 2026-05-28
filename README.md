@@ -1,26 +1,26 @@
 # Shufflem
 
-Shufflem ist ein Discord-Bot fuer World of Warcraft Mythic+ Shuffle-Events. Der Bot organisiert Anmeldungen, bildet automatisch faire 5er-Gruppen und reshuffelt die Spieler ueber mehrere Runden hinweg.
+Shufflem ist ein Discord-Bot für World of Warcraft Mythic+ Shuffle-Events. Der Bot organisiert Anmeldungen, bildet automatisch faire 5er-Gruppen und reshuffelt die Spieler über mehrere Runden hinweg.
 
-Das Tool ist besonders fuer Gilden, Communities oder feste M+ Gruppen gedacht, die mehrere Dungeon-Runs parallel planen moechten, ohne Gruppen manuell zusammenstellen und Spieler auf der Bench im Blick behalten zu muessen.
+Das Tool ist besonders für Gilden, Communities oder feste M+ Gruppen gedacht, die mehrere Dungeon-Runs parallel planen möchten, ohne Gruppen manuell zusammenstellen und Spieler auf der Bench im Blick behalten zu müssen.
 
 ## Was kann Shufflem?
 
 - Erstellt M+ Shuffle-Events per Discord Slash Command
-- Verwaltet Anmeldungen direkt ueber Discord Buttons und Dropdowns
-- Unterstuetzt Rollenwahl fuer Tank, Heiler, DD und Flex-Spieler
-- Bildet automatisch vollstaendige M+ Gruppen aus 1 Tank, 1 Heiler und 3 DDs
-- Priorisiert Spieler von der Bench in der naechsten Runde
-- Fuehrt bis zu 4 Runden pro Event aus
+- Verwaltet Anmeldungen direkt über Discord Buttons und Dropdowns
+- Unterstützt Rollenwahl für Tank, Heiler, DD und Flex-Spieler
+- Bildet automatisch vollständige M+ Gruppen aus 1 Tank, 1 Heiler und 3 DDs
+- Priorisiert Spieler von der Bench in der nächsten Runde
+- Führt bis zu 4 Runden pro Event aus
 - Reshuffelt Gruppen automatisch nach Ablauf der Rundendauer
-- Erlaubt Admins manuelle Eingriffe waehrend eines Events
+- Erlaubt Admins manuelle Eingriffe während eines Events
 - Erstellt optional Voice-Channels pro Gruppe in einer Discord-Kategorie
 - Postet am Ende eine Statistik mit gespielten Runden und Bench-Runden
-- Unterstuetzt wiederkehrende Events, zum Beispiel taeglich oder woechentlich
+- Unterstützt wiederkehrende Events, zum Beispiel täglich oder wöchentlich
 
-## Wofuer kann Shufflem verwendet werden?
+## Wofür kann Shufflem verwendet werden?
 
-Shufflem eignet sich fuer organisierte World of Warcraft Mythic+ Abende, bei denen viele Spieler teilnehmen und in mehreren Runden durchgemischt werden sollen.
+Shufflem eignet sich für organisierte World of Warcraft Mythic+ Abende, bei denen viele Spieler teilnehmen und in mehreren Runden durchgemischt werden sollen.
 
 Typische Einsatzzwecke:
 
@@ -28,15 +28,15 @@ Typische Einsatzzwecke:
 - Community-Events mit mehreren parallelen Gruppen
 - Faire Rotation zwischen aktiven Gruppen und Bench
 - Spontane M+ Sessions mit automatischer Rollenverteilung
-- Regelmaessige Events, die wiederholt im selben Discord-Channel stattfinden
+- Regelmäßige Events, die wiederholt im selben Discord-Channel stattfinden
 
 ## Ablauf eines Events
 
 1. Ein Admin erstellt ein Event mit `/shuffle create`.
-2. Spieler melden sich ueber das Dropdown als Tank, Heiler, DD oder Flex-Spieler an.
+2. Spieler melden sich über das Dropdown als Tank, Heiler, DD oder Flex-Spieler an.
 3. Zum geplanten Start baut der Bot automatisch die erste Runde.
 4. Nach jeder Rundendauer wird neu gemischt.
-5. Bench-Spieler werden bei der naechsten Gruppenzuteilung bevorzugt.
+5. Bench-Spieler werden bei der nächsten Gruppenzuteilung bevorzugt.
 6. Nach Runde 4 endet das Event.
 7. Der Bot postet eine Abschlussmeldung und eine Statistik.
 
@@ -63,13 +63,13 @@ DISCORD_TOKEN=dein_token_hier
 TIMEZONE=Europe/Berlin
 ```
 
-Optional kann die Discord-Kategorie fuer automatisch erstellte Voice-Channels gesetzt werden:
+Optional kann die Discord-Kategorie für automatisch erstellte Voice-Channels gesetzt werden:
 
 ```env
 VOICE_CATEGORY_NAME=Lobby
 ```
 
-Wenn die Variable nicht gesetzt ist, verwendet Shufflem standardmaessig die Kategorie `Lobby`.
+Wenn die Variable nicht gesetzt ist, verwendet Shufflem standardmäßig die Kategorie `Lobby`.
 
 ### Bot starten
 
@@ -92,7 +92,7 @@ Empfohlene Bot-Berechtigungen:
 - Channels ansehen
 - Nachrichtenverlauf lesen
 - Embeds einbetten
-- Channels verwalten, falls Voice-Channels automatisch erstellt und geloescht werden sollen
+- Channels verwalten, falls Voice-Channels automatisch erstellt und gelöscht werden sollen
 
 ## Verwendung
 
@@ -108,7 +108,7 @@ Mit Wiederholung:
 /shuffle create datum:15.04.2026 uhrzeit:20:00 rundendauer:45 wiederholen:wöchentlich
 ```
 
-Verfuegbare Wiederholungen:
+Verfügbare Wiederholungen:
 
 - `täglich`
 - `wöchentlich`
@@ -121,9 +121,9 @@ Verfuegbare Wiederholungen:
 /shuffle stop
 ```
 
-Das aktuelle Event laeuft weiter, aber es wird danach kein neues wiederkehrendes Event erstellt.
+Das aktuelle Event läuft weiter, aber es wird danach kein neues wiederkehrendes Event erstellt.
 
-### Spieler manuell hinzufuegen
+### Spieler manuell hinzufügen
 
 ```text
 /shuffle add spieler:@Name rollen:Tank + DD
@@ -135,27 +135,27 @@ Das aktuelle Event laeuft weiter, aber es wird danach kein neues wiederkehrendes
 /shuffle remove spieler:@Name
 ```
 
-## Admin-Funktionen waehrend eines Events
+## Admin-Funktionen während eines Events
 
-Admins mit der Discord-Berechtigung `Server verwalten` koennen waehrend eines laufenden Events:
+Admins mit der Discord-Berechtigung `Server verwalten` können während eines laufenden Events:
 
 - Spieler tauschen
-- Sofort einen Reshuffle ausloesen
+- Sofort einen Reshuffle auslösen
 - Spieler entfernen
-- Spieler hinzufuegen
+- Spieler hinzufügen
 - Den Timer pausieren und fortsetzen
 
-Diese Aktionen sind direkt ueber die Buttons an der Gruppen-Nachricht verfuegbar.
+Diese Aktionen sind direkt über die Buttons an der Gruppen-Nachricht verfügbar.
 
 ## Gruppenlogik
 
-Eine gueltige Mythic+ Gruppe besteht aus:
+Eine gültige Mythic+ Gruppe besteht aus:
 
 - 1 Tank
 - 1 Heiler
 - 3 DDs
 
-Flex-Spieler koennen mehrere Rollen angeben. Shufflem weist sie nur einer Rolle pro Runde zu. Spieler, die in der letzten Runde auf der Bench waren, werden bei der naechsten Runde bevorzugt, damit die Rotation fairer bleibt.
+Flex-Spieler können mehrere Rollen angeben. Shufflem weist sie nur einer Rolle pro Runde zu. Spieler, die in der letzten Runde auf der Bench waren, werden bei der nächsten Runde bevorzugt, damit die Rotation fairer bleibt.
 
 ## Datenhaltung
 
@@ -171,17 +171,19 @@ Die Datenbank wird beim Start automatisch erstellt, falls sie noch nicht existie
 
 ```text
 bot.py          Discord Bot, Slash Commands und Scheduler
-views.py        Discord Embeds, Buttons, Dropdowns und Admin-Menues
+views.py        Discord Embeds, Buttons, Dropdowns und Admin-Menüs
 shuffle.py      Gruppenbildung und Shuffle-Logik
 database.py     SQLite-Datenbankzugriff
-ANLEITUNG.md    Ausfuehrliche Einrichtungsanleitung
+ANLEITUNG.md    Ausführliche Einrichtungsanleitung
 requirements.txt
 ```
 
 ## Sicherheit
 
-Lege deinen Discord Token nur in einer lokalen `.env` Datei oder als Hosting-Variable ab. Der Token darf nicht in GitHub committed oder oeffentlich geteilt werden.
+Lege deinen Discord Token nur in einer lokalen `.env` Datei oder als Hosting-Variable ab. Der Token darf nicht in GitHub committed oder öffentlich geteilt werden.
+
+Auch `shuffle.db` sollte normalerweise nicht committed werden, da die Datei Discord-IDs, Eventdaten und Gruppenzuweisungen enthalten kann.
 
 ## Weitere Anleitung
 
-Eine ausfuehrlichere Schritt-fuer-Schritt-Anleitung findest du in [ANLEITUNG.md](ANLEITUNG.md).
+Eine ausführlichere Schritt-für-Schritt-Anleitung findest du in [ANLEITUNG.md](ANLEITUNG.md).
