@@ -1,13 +1,21 @@
-# Shufflem
+# Shufflem - World of Warcraft Mythic+ Discord Bot
 
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)
 ![Discord.py](https://img.shields.io/badge/Discord.py-2.3+-5865F2?style=for-the-badge&logo=discord&logoColor=white)
 ![SQLite](https://img.shields.io/badge/SQLite-local-003B57?style=for-the-badge&logo=sqlite&logoColor=white)
 ![World of Warcraft](https://img.shields.io/badge/WoW-Mythic+-F8B700?style=for-the-badge)
 
-Shufflem ist ein Discord-Bot für World of Warcraft Mythic+ Shuffle-Events. Der Bot organisiert Anmeldungen, bildet automatisch faire 5er-Gruppen und reshuffelt die Spieler über mehrere Runden hinweg.
+**Shufflem** ist ein **Discord-Bot für World of Warcraft Mythic+ Events**. Der Bot organisiert Anmeldungen, bildet automatisch faire 5er-Gruppen und reshuffelt die Spieler über mehrere Runden hinweg.
 
 Das Tool ist besonders für Gilden, Communities oder feste M+ Gruppen gedacht, die mehrere Dungeon-Runs parallel planen möchten, ohne Gruppen manuell zusammenstellen und Spieler auf der Bench im Blick behalten zu müssen.
+
+> Kurz gesagt: Shufflem ist ein WoW Mythic+ Discord Bot für Gilden, M+ Communities, Dungeon-Abende, Rollenverteilung, Bench-Rotation und automatische Gruppenbildung.
+
+## 🔎 Suchbegriffe
+
+Dieses Projekt ist relevant für:
+
+`World of Warcraft`, `WoW`, `Mythic+`, `M+`, `Discord Bot`, `Discord.py`, `Python Bot`, `WoW Guild Bot`, `Mythic Plus Bot`, `Dungeon Group Finder`, `M+ Shuffle`, `WoW Event Bot`, `Discord Event Manager`, `Guild Event Tool`
 
 ## 🎲 Was kann Shufflem?
 
@@ -25,7 +33,7 @@ Das Tool ist besonders für Gilden, Communities oder feste M+ Gruppen gedacht, d
 
 ## 🌈 Wofür kann Shufflem verwendet werden?
 
-Shufflem eignet sich für organisierte World of Warcraft Mythic+ Abende, bei denen viele Spieler teilnehmen und in mehreren Runden durchgemischt werden sollen.
+Shufflem eignet sich für organisierte **World of Warcraft Mythic+ Abende**, bei denen viele Spieler teilnehmen und in mehreren Runden durchgemischt werden sollen. Der Bot hilft vor allem dann, wenn eine WoW-Gilde oder Discord-Community mehrere Mythic+ Gruppen gleichzeitig bauen und fair rotieren möchte.
 
 Typische Einsatzzwecke:
 
@@ -34,6 +42,7 @@ Typische Einsatzzwecke:
 - ⚖️ Faire Rotation zwischen aktiven Gruppen und Bench
 - ⚡ Spontane M+ Sessions mit automatischer Rollenverteilung
 - 📆 Regelmäßige Events, die wiederholt im selben Discord-Channel stattfinden
+- 🧑‍🤝‍🧑 WoW-Gilden, die einen einfachen Mythic+ Group Finder im Discord brauchen
 
 ## 🧭 Ablauf eines Events
 
@@ -183,6 +192,31 @@ shuffle.py      Gruppenbildung und Shuffle-Logik
 database.py     SQLite-Datenbankzugriff
 ANLEITUNG.md    Ausführliche Einrichtungsanleitung
 requirements.txt
+```
+
+## 🏷️ Empfohlene GitHub Topics
+
+Damit das Repository auf GitHub und in Google besser gefunden wird, sollten in der GitHub-About-Box diese Topics gesetzt werden:
+
+```text
+discord-bot
+discord-py
+python
+world-of-warcraft
+wow
+mythic-plus
+mythic-dungeons
+guild-management
+event-management
+sqlite
+shuffle-bot
+mplus
+```
+
+Empfohlene Repository-Beschreibung:
+
+```text
+World of Warcraft Mythic+ Discord Bot for guild events, automatic group shuffling, role signup, bench rotation and M+ event management.
 ```
 
 ## 🔐 Sicherheit
