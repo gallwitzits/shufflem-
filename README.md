@@ -194,30 +194,7 @@ ANLEITUNG.md    Ausführliche Einrichtungsanleitung
 requirements.txt
 ```
 
-## 🏷️ Empfohlene GitHub Topics
 
-Damit das Repository auf GitHub und in Google besser gefunden wird, sollten in der GitHub-About-Box diese Topics gesetzt werden:
-
-```text
-discord-bot
-discord-py
-python
-world-of-warcraft
-wow
-mythic-plus
-mythic-dungeons
-guild-management
-event-management
-sqlite
-shuffle-bot
-mplus
-```
-
-Empfohlene Repository-Beschreibung:
-
-```text
-World of Warcraft Mythic+ Discord Bot for guild events, automatic group shuffling, role signup, bench rotation and M+ event management.
-```
 
 ## 🔐 Sicherheit
 
