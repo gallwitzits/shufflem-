@@ -317,6 +317,39 @@ async def get_bench_ids_from_last_round(event_id: int, round_number: int) -> set
         return {row[0] for row in rows}
 
 
+async def get_pair_counts(event_id: int, before_round: int) -> dict[tuple[str, str], int]:
+    """
+    Zählt für dieses Event, wie oft je zwei Spieler bereits zusammen in einer
+    Gruppe waren (alle Runden < before_round, ohne Bench).
+    Key = tuple(sorted((user_a, user_b))), Value = Anzahl gemeinsamer Runden.
+    """
+    counts: dict[tuple[str, str], int] = {}
+    if before_round <= 1:
+        return counts
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "SELECT round_number, group_number, user_id FROM group_assignments "
+            "WHERE event_id = ? AND round_number < ? AND group_number > 0 "
+            "ORDER BY round_number, group_number",
+            (event_id, before_round)
+        )
+        rows = await cursor.fetchall()
+
+    # Mitglieder je (Runde, Gruppe) sammeln
+    members_by_group: dict[tuple[int, int], list[str]] = {}
+    for round_number, group_number, user_id in rows:
+        members_by_group.setdefault((round_number, group_number), []).append(user_id)
+
+    for members in members_by_group.values():
+        unique = sorted(set(members))
+        for i in range(len(unique)):
+            for j in range(i + 1, len(unique)):
+                key = (unique[i], unique[j])
+                counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
 async def get_groups_for_round(event_id: int, round_number: int) -> tuple[list[dict], list[dict]]:
     """Lädt die aktuellen Gruppen und Bench aus der DB für eine Runde."""
     async with aiosqlite.connect(DB_PATH) as db:

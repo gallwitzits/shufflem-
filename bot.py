@@ -35,6 +35,7 @@ v.set_timezone(GUILD_TZ)
 
 intents = discord.Intents.default()
 intents.message_content = False
+intents.voice_states = True  # nötig, um verbundene Spieler in Gruppen-Channels zu verschieben
 
 bot = discord.Client(intents=intents)
 tree = app_commands.CommandTree(bot)
@@ -110,7 +111,9 @@ async def _start_round(event: dict, message: discord.Message, round_number: int,
     if round_number > 1:
         prev_bench_ids = await get_bench_ids_from_last_round(event_id, round_number - 1)
 
-    groups, bench = build_groups(signups, prev_bench_ids)
+    # Wer war in bisherigen Runden schon mit wem zusammen? -> Wiederholungen vermeiden
+    pair_counts = await db.get_pair_counts(event_id, round_number)
+    groups, bench = build_groups(signups, prev_bench_ids, pair_counts)
     round_end_at = now_utc + timedelta(minutes=event["round_duration_minutes"])
 
     await db.save_group_assignments(event_id, round_number, groups, bench)
@@ -122,6 +125,8 @@ async def _start_round(event: dict, message: discord.Message, round_number: int,
     await _ensure_voice_channels_for_round(
         updated_event, message.channel, groups, reset_existing=False
     )
+    # Verbundene Spieler automatisch in ihren Gruppen-Voice-Channel ziehen
+    await _move_players_to_voice(updated_event, getattr(message.channel, "guild", None), groups)
 
     # Admin-Buttons (Tauschen + Reshuffle) an die Gruppen-Nachricht hängen
     admin_view = _make_groups_admin_view(event_id, round_number, message)
@@ -407,6 +412,78 @@ async def _ensure_voice_channels_for_round(event: dict, channel,
     return created_channels
 
 
+async def _move_players_to_voice(event: dict, guild, groups: list[dict]) -> None:
+    """
+    Zieht alle bereits verbundenen Gruppenmitglieder in ihren jeweiligen
+    Gruppen-Voice-Channel ("Gruppe X").
+
+    Hinweis: Discord erlaubt das Verschieben nur für Mitglieder, die bereits in
+    IRGENDEINEM Voice-Channel sitzen. Wer gar nicht im Voice ist, kann nicht
+    gezogen werden und wird nur geloggt. Der Bot braucht die Berechtigung
+    "Mitglieder verschieben".
+    """
+    if not guild or not groups:
+        return
+
+    records = await db.get_voice_channels(event["id"])
+    channel_by_group: dict[int, int] = {}
+    for record in records:
+        try:
+            channel_by_group[record["group_number"]] = int(record["channel_id"])
+        except (TypeError, ValueError):
+            continue
+
+    not_connected: list[str] = []
+
+    for group_number, group in enumerate(groups, start=1):
+        channel_id = channel_by_group.get(group_number)
+        if not channel_id:
+            continue
+
+        target = guild.get_channel(channel_id)
+        if target is None:
+            try:
+                target = await bot.fetch_channel(channel_id)
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                continue
+        if not isinstance(target, discord.VoiceChannel):
+            continue
+
+        members = [group.get("tank"), group.get("healer")] + group.get("dps", [])
+        for player in members:
+            if not player:
+                continue
+            try:
+                user_id = int(player["user_id"])
+            except (TypeError, ValueError):
+                continue
+
+            member = guild.get_member(user_id)
+            if member is None:
+                try:
+                    member = await guild.fetch_member(user_id)
+                except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                    member = None
+
+            # Nur bereits verbundene Mitglieder können verschoben werden
+            if member is None or member.voice is None or member.voice.channel is None:
+                if member is not None:
+                    not_connected.append(member.display_name)
+                continue
+            if member.voice.channel.id == target.id:
+                continue
+
+            try:
+                await member.move_to(
+                    target, reason=f"WoW Shuffle Event {event['id']}: Gruppe {group_number}"
+                )
+            except (discord.Forbidden, discord.HTTPException) as e:
+                print(f"Konnte {member.display_name} nicht in Gruppe {group_number} verschieben: {e}")
+
+    if not_connected:
+        print("Nicht verschoben (nicht im Voice): " + ", ".join(not_connected))
+
+
 async def _fetch_event_message(event: dict, fallback_channel=None) -> discord.Message | None:
     if not event or not event.get("message_id"):
         return None
@@ -439,7 +516,8 @@ async def _build_extra_groups_from_bench(event_id: int, round_number: int) -> tu
 
     bench_pool = [dict(player) for player in bench]
     prev_bench_ids = {player["user_id"] for player in bench_pool}
-    new_groups, new_bench = build_groups(bench_pool, prev_bench_ids)
+    pair_counts = await db.get_pair_counts(event_id, round_number)
+    new_groups, new_bench = build_groups(bench_pool, prev_bench_ids, pair_counts)
     if not new_groups:
         return 0, []
 
