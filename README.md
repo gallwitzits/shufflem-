@@ -24,10 +24,12 @@ Dieses Projekt ist relevant für:
 - 🛡️ Unterstützt Rollenwahl für Tank, Heiler, DD und Flex-Spieler
 - 👥 Bildet automatisch vollständige M+ Gruppen aus 1 Tank, 1 Heiler und 3 DDs
 - 🪑 Priorisiert Spieler von der Bench in der nächsten Runde
+- 🎯 Mischt die Gruppen bewusst durch, sodass nicht ständig die gleichen Spieler zusammen landen (berücksichtigt, wer in vorherigen Runden schon zusammen war)
 - 🔁 Führt bis zu 4 Runden pro Event aus
 - 🔀 Reshuffelt Gruppen automatisch nach Ablauf der Rundendauer
 - 🧰 Erlaubt Admins manuelle Eingriffe während eines Events
 - 🔊 Erstellt optional Voice-Channels pro Gruppe in einer Discord-Kategorie
+- 🚚 Verschiebt verbundene Spieler bei Rundenstart automatisch in ihren Gruppen-Voice-Channel
 - 📊 Postet am Ende eine Statistik mit gespielten Runden und Bench-Runden
 - ♻️ Unterstützt wiederkehrende Events, zum Beispiel täglich oder wöchentlich
 
@@ -49,10 +51,11 @@ Typische Einsatzzwecke:
 1. Ein Admin erstellt ein Event mit `/shuffle create`.
 2. Spieler melden sich über das Dropdown als Tank, Heiler, DD oder Flex-Spieler an.
 3. Zum geplanten Start baut der Bot automatisch die erste Runde.
-4. Nach jeder Rundendauer wird neu gemischt.
-5. Bench-Spieler werden bei der nächsten Gruppenzuteilung bevorzugt.
-6. Nach Runde 4 endet das Event.
-7. Der Bot postet eine Abschlussmeldung und eine Statistik.
+4. Verbundene Spieler werden bei Rundenstart automatisch in ihren Gruppen-Voice-Channel verschoben.
+5. Nach jeder Rundendauer wird neu gemischt.
+6. Bench-Spieler werden bei der nächsten Gruppenzuteilung bevorzugt; ansonsten mischt der Bot so, dass möglichst nicht die gleichen Spieler erneut zusammen sind.
+7. Nach Runde 4 endet das Event.
+8. Der Bot postet eine Abschlussmeldung und eine Statistik.
 
 ## ⚙️ Installation
 
@@ -107,6 +110,7 @@ Empfohlene Bot-Berechtigungen:
 - Nachrichtenverlauf lesen
 - Embeds einbetten
 - Channels verwalten, falls Voice-Channels automatisch erstellt und gelöscht werden sollen
+- Mitglieder verschieben (`Move Members`), falls Spieler bei Rundenstart automatisch in ihre Gruppen-Voice-Channels gezogen werden sollen
 
 ## 🚀 Verwendung
 
@@ -171,7 +175,24 @@ Eine gültige Mythic+ Gruppe besteht aus:
 | 💚 Heiler | 1 | Grün / Support |
 | ⚔️ DD | 3 | Rot / Schaden |
 
-Flex-Spieler können mehrere Rollen angeben. Shufflem weist sie nur einer Rolle pro Runde zu. Spieler, die in der letzten Runde auf der Bench waren, werden bei der nächsten Runde bevorzugt, damit die Rotation fairer bleibt.
+Flex-Spieler können mehrere Rollen angeben. Shufflem weist sie nur einer Rolle pro Runde zu.
+
+Die Gruppenbildung läuft in zwei Schritten:
+
+1. **Fairness** – zuerst wird entschieden, *wer* spielt und wer auf die Bench kommt. Spieler, die in der letzten Runde auf der Bench waren, werden bevorzugt eingeteilt, damit die Rotation fair bleibt.
+2. **Durchmischung** – anschließend werden diese Spieler so auf die Gruppen verteilt, dass Leute, die in vorherigen Runden desselben Events schon oft zusammen waren, möglichst *nicht* wieder in dieselbe Gruppe kommen. So spielt man über den Abend hinweg mit wechselnden Leuten statt immer mit denselben.
+
+Die Fairness bleibt dabei vollständig erhalten – es spielt niemand mehr oder weniger, nur die Zusammenstellung der Gruppen wird abwechslungsreicher. Wie stark sich das auswirkt, hängt vom Roster ab: Je mehr Gruppen gleichzeitig laufen, desto mehr Spielraum hat der Bot zum Durchmischen.
+
+## 🔊 Voice-Channels & automatisches Verschieben
+
+Ist eine Voice-Kategorie gesetzt (`VOICE_CATEGORY_NAME`, Standard `Lobby`), legt Shufflem pro Gruppe einen Voice-Channel `Gruppe 1`, `Gruppe 2`, … an. Bei **jedem Rundenstart** zieht der Bot die Gruppenmitglieder automatisch in ihren Channel.
+
+Zu beachten:
+
+- Der Bot benötigt dafür die Berechtigung **`Mitglieder verschieben` (Move Members)**.
+- Discord erlaubt das Verschieben nur für Mitglieder, die **bereits in irgendeinem Voice-Channel** sitzen. Wer gar nicht im Voice ist, kann nicht gezogen werden und wird nur im Log vermerkt.
+- Die Channels werden am Ende des Events wieder aufgeräumt.
 
 ## 💾 Datenhaltung
 

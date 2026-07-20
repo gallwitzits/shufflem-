@@ -34,6 +34,8 @@ Noch auf der Bot-Seite:
    - ✅ `Read Messages/View Channels`
    - ✅ `Embed Links`
    - ✅ `Read Message History`
+   - ✅ `Manage Channels` *(nur nötig, wenn Voice-Channels pro Gruppe automatisch erstellt/gelöscht werden sollen)*
+   - ✅ `Move Members` *(nur nötig, wenn Spieler bei Rundenstart automatisch in ihre Gruppen-Voice-Channels verschoben werden sollen)*
 4. Die generierte URL kopieren → im Browser öffnen
 5. Deinen Gilden-Server auswählen → **"Autorisieren"**
 
@@ -214,6 +216,7 @@ Falls du einen Raspberry Pi hast:
 | Slash Commands erscheinen nicht | 1-2 Minuten warten nach erstem Start (Discord synchronisiert) |
 | `Missing Permissions` | Bot-Rolle im Server hat nicht genug Rechte → Bot neu einladen mit korrekten Berechtigungen |
 | Bot reagiert nicht auf Buttons nach Neustart | Normal – nach Neustart werden Views neu registriert, dann funktioniert es wieder |
+| Spieler werden nicht in die Gruppen-Voice-Channels verschoben | Bot braucht die Berechtigung `Move Members`. Außerdem können nur Spieler verschoben werden, die bereits in einem Voice-Channel sitzen. |
 
 ---
 
